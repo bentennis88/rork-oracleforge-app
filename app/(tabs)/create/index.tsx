@@ -7,9 +7,12 @@ import {
   TouchableOpacity,
   ScrollView,
   Animated,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  ToastAndroid,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +20,7 @@ import { router, Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Sparkles } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
+import generateOracle from '@/src/services/grokApi';
 
 const { width } = Dimensions.get('window');
 
@@ -148,6 +152,19 @@ export default function CreateScreen() {
     setPrompt(example);
   };
 
+  const showToast = (message: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+      return;
+    }
+    if (Platform.OS === 'web') {
+      // eslint-disable-next-line no-alert
+      alert(message);
+      return;
+    }
+    Alert.alert('Error', message);
+  };
+
   const handleCreate = async () => {
     if (!prompt.trim()) return;
 
@@ -155,21 +172,33 @@ export default function CreateScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+    const userPrompt = prompt.trim();
 
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    try {
+      const oracleJson = await generateOracle(userPrompt);
 
-    setIsCreating(false);
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
 
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.push({
+        pathname: '/oracle-preview',
+        params: {
+          userPrompt,
+          oracle: JSON.stringify(oracleJson),
+        },
+      });
+
+      setPrompt('');
+    } catch (error) {
+      console.error('generateOracle error:', error);
+      showToast('Something went wrong — try a simpler request or try again');
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    } finally {
+      setIsCreating(false);
     }
-
-    router.push({
-      pathname: '/oracle-preview',
-      params: { prompt },
-    });
-    
-    setPrompt('');
   };
 
   const canCreate = prompt.trim().length > 0;
@@ -219,6 +248,7 @@ export default function CreateScreen() {
           >
             <Sparkles size={48} color={colors.background} strokeWidth={2.5} />
           </Animated.View>
+          <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 24 }} />
           <Text style={[styles.loadingText, { color: colors.text }]}>Building your oracle...</Text>
           <Text style={[styles.loadingSubtext, { color: colors.textSecondary }]}>This won&apos;t take long</Text>
         </View>

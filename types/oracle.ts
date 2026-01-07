@@ -19,6 +19,11 @@ export interface Oracle {
   category: OracleCategory;
   prompt: string;
   icon: string;
+  /**
+   * Full Grok-generated oracle schema (inputs/components + result).
+   * Stored in Firestore for rendering the oracle interactively later.
+   */
+  oracleJson?: any;
   options?: OracleOption[];
   createdAt: Date;
   lastUsedAt?: Date;
