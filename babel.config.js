@@ -1,15 +1,8 @@
 module.exports = function (api) {
   api.cache(true);
   return {
-    presets: ["babel-preset-expo"],
-    plugins: [
-      [
-        "module:react-native-dotenv",
-        {
-          moduleName: "@env",
-          path: ".env",
-        },
-      ],
-    ],
+    presets: ['babel-preset-expo'],
+    // Remove any plugins array that references react-native-dotenv
+    // If you have other plugins (e.g., reanimated), keep only those
   };
 };

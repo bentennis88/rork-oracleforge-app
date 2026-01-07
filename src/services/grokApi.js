@@ -1,5 +1,3 @@
-import { GROK_API_KEY } from "@env";
-
 const GROK_API_URL = "https://api.x.ai/v1/chat/completions";
 // Use "grok-4" for highest quality; "grok-4-fast" for speed.
 const DEFAULT_MODEL = "grok-4-fast";
@@ -92,8 +90,9 @@ async function readResponseBodySafe(res) {
  * @returns {Promise<any>}
  */
 export default async function generateOracle(userPrompt, options = {}) {
+  const GROK_API_KEY = process.env.EXPO_PUBLIC_GROK_API_KEY || process.env.GROK_API_KEY;
   if (!GROK_API_KEY) {
-    throw new GrokApiError("Missing GROK_API_KEY. Add it to your .env file.", {
+    throw new GrokApiError("Missing EXPO_PUBLIC_GROK_API_KEY. Add it to your .env file.", {
       code: "missing_api_key",
     });
   }
