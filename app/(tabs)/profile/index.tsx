@@ -9,7 +9,7 @@ import {
   Animated,
   Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+// No gradients for the clean, professional theme
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import {
@@ -19,7 +19,6 @@ import {
   Vibrate,
   Info,
   ChevronRight,
-  Sparkles,
   Shield,
   HelpCircle,
   LogOut,
@@ -29,8 +28,8 @@ import {
 import { useTheme } from '@/hooks/useTheme';
 import { useOracles } from '@/hooks/useOracles';
 import { useAuth } from '@/hooks/useAuth';
-import GlowingOrb from '@/components/GlowingOrb';
 import { useRouter } from 'expo-router';
+import { Typography } from '@/constants/typography';
 
 export default function ProfileScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
@@ -58,17 +57,14 @@ export default function ProfileScreen() {
   const totalUsage = oracles.reduce((sum, o) => sum + o.usageCount, 0);
 
   const stats = [
-    { label: 'Oracles', value: oracles.length, color: colors.accent },
-    { label: 'Favorites', value: favoriteOracles.length, color: colors.cyan },
-    { label: 'Total Uses', value: totalUsage, color: colors.success },
+    { label: 'Oracles', value: oracles.length },
+    { label: 'Favorites', value: favoriteOracles.length },
+    { label: 'Total Uses', value: totalUsage },
   ];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <LinearGradient
-        colors={[colors.backgroundSecondary, colors.background]}
-        style={styles.headerGradient}
-      />
+      <View style={[styles.headerGradient, { backgroundColor: colors.background }]} />
 
       <ScrollView
         style={styles.scrollView}
@@ -79,12 +75,10 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-          <View style={[styles.avatarContainer, { backgroundColor: colors.surface }]}>
-            <LinearGradient
-              colors={[colors.accentGlow, 'transparent']}
-              style={styles.avatarGlow}
-            />
-            <GlowingOrb size={48} color={colors.accent} />
+          <View style={[styles.avatarContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.avatarMonogram, { color: colors.text }]}>
+              {(user?.email?.[0] || 'O').toUpperCase()}
+            </Text>
           </View>
           <Text style={[styles.userName, { color: colors.text }]}>
             {user?.email?.split('@')[0] || 'Oracle Forger'}
@@ -100,7 +94,7 @@ export default function ProfileScreen() {
               key={index}
               style={[styles.statCard, { backgroundColor: colors.surface }]}
             >
-              <Text style={[styles.statValue, { color: stat.color }]}>
+              <Text style={[styles.statValue, { color: colors.text }]}>
                 {stat.value}
               </Text>
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
@@ -114,12 +108,12 @@ export default function ProfileScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Subscription
           </Text>
-          <View style={[styles.subscriptionCard, { backgroundColor: colors.surface }]}>
+          <View style={[styles.subscriptionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.subscriptionContent}>
               <View style={styles.subscriptionHeader}>
-                <View style={[styles.planBadge, { backgroundColor: colors.accentGlow }]}>
-                  <Zap size={16} color={colors.accent} />
-                  <Text style={[styles.planBadgeText, { color: colors.accent }]}>
+                <View style={[styles.planBadge, { borderColor: colors.border }]}>
+                  <Zap size={16} color={colors.textMuted} />
+                  <Text style={[styles.planBadgeText, { color: colors.textMuted }]}>
                     Free Plan
                   </Text>
                 </View>
@@ -133,7 +127,7 @@ export default function ProfileScreen() {
                     style={[
                       styles.limitBarFill, 
                       { 
-                        backgroundColor: oracles.length >= 3 ? colors.error : colors.accent,
+                        backgroundColor: 'rgba(255,255,255,0.22)',
                         width: `${Math.min((oracles.length / 3) * 100, 100)}%`
                       }
                     ]} 
@@ -145,7 +139,7 @@ export default function ProfileScreen() {
               </View>
             </View>
             <TouchableOpacity 
-              style={[styles.upgradeButton]}
+              style={[styles.upgradeButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
               activeOpacity={0.8}
               onPress={() => {
                 if (Platform.OS !== 'web') {
@@ -153,15 +147,10 @@ export default function ProfileScreen() {
                 }
               }}
             >
-              <LinearGradient
-                colors={[colors.accent, colors.cyan]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.upgradeButtonGradient}
-              >
-                <Crown size={20} color="#fff" />
-                <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
-              </LinearGradient>
+              <View style={styles.upgradeButtonGradient}>
+                <Crown size={18} color="#FFFFFF" />
+                <Text style={[styles.upgradeButtonText, { color: '#FFFFFF' }]}>Upgrade to Pro</Text>
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -170,7 +159,7 @@ export default function ProfileScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Appearance
           </Text>
-          <View style={[styles.settingsCard, { backgroundColor: colors.surface }]}>
+          <View style={[styles.settingsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <TouchableOpacity
               style={styles.settingRow}
               onPress={handleThemeToggle}
@@ -178,9 +167,9 @@ export default function ProfileScreen() {
             >
               <View style={styles.settingLeft}>
                 {isDark ? (
-                  <Moon size={22} color={colors.cyan} />
+                  <Moon size={22} color={colors.textSecondary} />
                 ) : (
-                  <Sun size={22} color={colors.accent} />
+                  <Sun size={22} color={colors.textSecondary} />
                 )}
                 <Text style={[styles.settingLabel, { color: colors.text }]}>
                   Dark Mode
@@ -189,7 +178,7 @@ export default function ProfileScreen() {
               <Switch
                 value={isDark}
                 onValueChange={handleThemeToggle}
-                trackColor={{ false: colors.border, true: colors.accent }}
+                trackColor={{ false: 'rgba(255,255,255,0.10)', true: 'rgba(255,255,255,0.18)' }}
                 thumbColor="#fff"
               />
             </TouchableOpacity>
@@ -200,7 +189,7 @@ export default function ProfileScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Preferences
           </Text>
-          <View style={[styles.settingsCard, { backgroundColor: colors.surface }]}>
+          <View style={[styles.settingsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.settingRow}>
               <View style={styles.settingLeft}>
                 <Vibrate size={22} color={colors.textSecondary} />
@@ -210,7 +199,7 @@ export default function ProfileScreen() {
               </View>
               <Switch
                 value={true}
-                trackColor={{ false: colors.border, true: colors.accent }}
+                trackColor={{ false: colors.border, true: 'rgba(255,255,255,0.18)' }}
                 thumbColor="#fff"
               />
             </View>
@@ -224,7 +213,7 @@ export default function ProfileScreen() {
               </View>
               <Switch
                 value={false}
-                trackColor={{ false: colors.border, true: colors.accent }}
+                trackColor={{ false: colors.border, true: 'rgba(255,255,255,0.18)' }}
                 thumbColor="#fff"
               />
             </View>
@@ -235,7 +224,7 @@ export default function ProfileScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Account
           </Text>
-          <View style={[styles.settingsCard, { backgroundColor: colors.surface }]}>
+          <View style={[styles.settingsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.settingRow}>
               <View style={styles.settingLeft}>
                 <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>
@@ -257,8 +246,8 @@ export default function ProfileScreen() {
               }}
             >
               <View style={styles.settingLeft}>
-                <LogOut size={22} color={colors.error} />
-                <Text style={[styles.settingLabel, { color: colors.error }]}>
+                <LogOut size={22} color={colors.textSecondary} />
+                <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>
                   Sign Out
                 </Text>
               </View>
@@ -270,7 +259,7 @@ export default function ProfileScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             About
           </Text>
-          <View style={[styles.settingsCard, { backgroundColor: colors.surface }]}>
+          <View style={[styles.settingsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <TouchableOpacity style={styles.settingRow} activeOpacity={0.7}>
               <View style={styles.settingLeft}>
                 <Info size={22} color={colors.textSecondary} />
@@ -305,7 +294,7 @@ export default function ProfileScreen() {
 
         <View style={styles.footer}>
           <View style={styles.footerBrand}>
-            <Sparkles size={16} color={colors.textMuted} />
+            <Info size={16} color={colors.textMuted} />
             <Text style={[styles.footerText, { color: colors.textMuted }]}>
               OracleForge v1.0.0
             </Text>
@@ -343,22 +332,26 @@ const styles = StyleSheet.create({
   avatarContainer: {
     width: 100,
     height: 100,
-    borderRadius: 50,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    overflow: 'hidden',
+    borderWidth: 1,
   },
-  avatarGlow: {
-    ...StyleSheet.absoluteFillObject,
+  avatarMonogram: {
+    fontFamily: Typography.title,
+    fontSize: 28,
+    letterSpacing: 1,
   },
   userName: {
     fontSize: 24,
     fontWeight: '800',
     marginBottom: 4,
+    fontFamily: Typography.title,
   },
   userSubtitle: {
     fontSize: 15,
+    fontFamily: Typography.body,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -369,7 +362,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     paddingVertical: 18,
-    borderRadius: 16,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   statValue: {
     fontSize: 26,
@@ -392,10 +386,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 12,
     marginLeft: 4,
+    fontFamily: Typography.bodyStrong,
   },
   settingsCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
+    borderRadius: 8,
+    borderWidth: 1,
   },
   settingRow: {
     flexDirection: 'row',
@@ -412,6 +407,7 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontSize: 16,
     fontWeight: '500',
+    fontFamily: Typography.body,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -435,9 +431,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   subscriptionCard: {
-    borderRadius: 16,
+    borderRadius: 8,
     padding: 20,
     gap: 16,
+    borderWidth: 1,
   },
   subscriptionContent: {
     gap: 16,
@@ -453,11 +450,13 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   planBadgeText: {
     fontSize: 14,
     fontWeight: '700',
+    fontFamily: Typography.bodyStrong,
   },
   limitContainer: {
     gap: 8,
@@ -469,8 +468,7 @@ const styles = StyleSheet.create({
   limitBar: {
     height: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 4,
-    overflow: 'hidden',
+    borderRadius: 2,
   },
   limitBarFill: {
     height: '100%',
@@ -481,8 +479,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   upgradeButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
+    borderRadius: 8,
+    borderWidth: 1,
   },
   upgradeButtonGradient: {
     flexDirection: 'row',
@@ -495,6 +493,6 @@ const styles = StyleSheet.create({
   upgradeButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fff',
+    fontFamily: Typography.bodyStrong,
   },
 });

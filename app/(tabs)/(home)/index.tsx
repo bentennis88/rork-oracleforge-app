@@ -5,29 +5,23 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   Animated,
   Platform,
+  ToastAndroid,
+  Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Sparkles, Star, Clock, Plus } from 'lucide-react-native';
+import { Star, Clock } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useOracles } from '@/hooks/useOracles';
 import { useAuth } from '@/hooks/useAuth';
 import OracleCard from '@/components/OracleCard';
-import GlowingOrb from '@/components/GlowingOrb';
-
-const MOTIVATIONAL_QUOTES = [
-  "The future belongs to those who believe in the beauty of their dreams.",
-  "Every moment is a fresh beginning.",
-  "Your only limit is your mind.",
-  "Believe you can and you're halfway there.",
-  "The best time for new beginnings is now.",
-  "Small steps every day lead to big changes.",
-  "Trust your intuition, it knows the way.",
-];
+import { deleteDoc, doc } from 'firebase/firestore';
+import { db } from '@/config/firebase';
+import { Typography } from '@/constants/typography';
 
 export default React.memo(function HomeScreen() {
   const { colors } = useTheme();
@@ -36,12 +30,6 @@ export default React.memo(function HomeScreen() {
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
-  const fabScale = useRef(new Animated.Value(0)).current;
-
-  const dailyQuote = useMemo(() => {
-    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-    return MOTIVATIONAL_QUOTES[dayOfYear % MOTIVATIONAL_QUOTES.length];
-  }, []);
 
   const firstName = useMemo(() => {
     if (user?.displayName) {
@@ -66,15 +54,7 @@ export default React.memo(function HomeScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-
-    Animated.spring(fabScale, {
-      toValue: 1,
-      delay: 400,
-      tension: 50,
-      friction: 7,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeAnim, slideAnim, fabScale]);
+  }, [fadeAnim, slideAnim]);
 
   const handleCreateOracle = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -83,6 +63,52 @@ export default React.memo(function HomeScreen() {
     router.push('/(tabs)/create');
   }, []);
 
+  const showToast = useCallback((message: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+      return;
+    }
+    if (Platform.OS === 'web') {
+      // eslint-disable-next-line no-alert
+      alert(message);
+      return;
+    }
+    Alert.alert('Notice', message);
+  }, []);
+
+  const confirmDelete = useCallback(
+    (oracleId: string, oracleName?: string) => {
+      if (!user) return;
+
+      const doDelete = async () => {
+        try {
+          await deleteDoc(doc(db, 'users', user.uid, 'oracles', oracleId));
+          // Firestore snapshot listener in useOracles will refresh the list automatically.
+        } catch (e) {
+          console.error('Delete failed:', e);
+          showToast('Delete failed');
+        }
+      };
+
+      if (Platform.OS === 'web') {
+        // eslint-disable-next-line no-alert
+        const name = oracleName ? `'${oracleName}'` : 'this oracle';
+        if (confirm(`Permanently delete ${name}? This cannot be undone.`)) void doDelete();
+        return;
+      }
+
+      Alert.alert(
+        `Permanently delete '${oracleName || 'this oracle'}'?`,
+        'This cannot be undone.',
+        [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => void doDelete() },
+        ]
+      );
+    },
+    [showToast, user]
+  );
+
   const handleOraclePress = useCallback((id: string) => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -90,13 +116,33 @@ export default React.memo(function HomeScreen() {
     router.push(`/oracle/${id}` as const);
   }, []);
 
+  const handleOracleRun = useCallback((oracle: any) => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    const fullOracle =
+      oracle?.oracleJson ??
+      ({
+        title: oracle?.name ?? 'Untitled Oracle',
+        description: oracle?.description ?? '',
+        category: oracle?.category ?? 'Other',
+        components: [],
+        result: { type: 'text', message: 'No result' },
+      } as const);
+
+    router.push({
+      pathname: '/oracle-run',
+      params: {
+        oracle: JSON.stringify(fullOracle),
+        userPrompt: oracle?.prompt ?? '',
+        oracleId: oracle?.id ?? '',
+      },
+    });
+  }, []);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <LinearGradient
-        colors={[colors.backgroundSecondary, colors.background]}
-        style={styles.headerGradient}
-      />
-      
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
@@ -112,11 +158,24 @@ export default React.memo(function HomeScreen() {
           ]}
         >
           <View style={styles.headerContent}>
-            <Text style={[styles.greeting, { color: colors.text }]}>Hey {firstName},</Text>
-            <Text style={[styles.quote, { color: colors.textSecondary }]}>
-              {dailyQuote}
+            <Text style={[styles.greeting, { color: colors.text }]}>Dashboard</Text>
+            <Text style={[styles.subheading, { color: colors.textSecondary }]}>
+              {firstName}&apos;s oracles
             </Text>
           </View>
+          <Pressable
+            onPress={handleCreateOracle}
+            style={({ pressed }) => [
+              styles.createButton,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.surface,
+                transform: [{ scale: pressed ? 0.98 : 1 }],
+              },
+            ]}
+          >
+            <Text style={[styles.createButtonText, { color: '#FFFFFF' }]}>New</Text>
+          </Pressable>
         </Animated.View>
 
 
@@ -124,7 +183,7 @@ export default React.memo(function HomeScreen() {
         {favoriteOracles.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Star size={18} color={colors.accent} fill={colors.accent} />
+              <Star size={18} color={colors.textMuted} strokeWidth={2} />
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
                 Favorites
               </Text>
@@ -138,8 +197,10 @@ export default React.memo(function HomeScreen() {
                 <OracleCard
                   key={oracle.id}
                   oracle={oracle}
-                  onPress={() => handleOraclePress(oracle.id)}
-                  onRunPress={() => handleOraclePress(oracle.id)}
+                  onPress={() => handleOracleRun(oracle)}
+                  onRunPress={() => handleOracleRun(oracle)}
+                  onDeletePress={() => confirmDelete(oracle.id, oracle.name)}
+                  onLongPress={() => confirmDelete(oracle.id, oracle.name)}
                   variant="compact"
                 />
               ))}
@@ -150,7 +211,7 @@ export default React.memo(function HomeScreen() {
         {recentOracles.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Clock size={18} color={colors.cyan} />
+              <Clock size={18} color={colors.textMuted} strokeWidth={2} />
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
                 Recently Used
               </Text>
@@ -160,8 +221,10 @@ export default React.memo(function HomeScreen() {
                 <OracleCard
                   key={oracle.id}
                   oracle={oracle}
-                  onPress={() => handleOraclePress(oracle.id)}
-                  onRunPress={() => handleOraclePress(oracle.id)}
+                  onPress={() => handleOracleRun(oracle)}
+                  onRunPress={() => handleOracleRun(oracle)}
+                  onDeletePress={() => confirmDelete(oracle.id, oracle.name)}
+                  onLongPress={() => confirmDelete(oracle.id, oracle.name)}
                   variant="list"
                 />
               ))}
@@ -171,12 +234,11 @@ export default React.memo(function HomeScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Sparkles size={18} color={colors.accentLight} />
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Your Oracles
             </Text>
-            <View style={[styles.countBadge, { backgroundColor: colors.accent }]}>
-              <Text style={[styles.countText, { color: colors.background }]}>
+            <View style={[styles.countBadge, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.countText, { color: colors.textSecondary }]}>
                 {oracles.length}
               </Text>
             </View>
@@ -186,8 +248,10 @@ export default React.memo(function HomeScreen() {
               <OracleCard
                 key={oracle.id}
                 oracle={oracle}
-                onPress={() => handleOraclePress(oracle.id)}
-                onRunPress={() => handleOraclePress(oracle.id)}
+                onPress={() => handleOracleRun(oracle)}
+                onRunPress={() => handleOracleRun(oracle)}
+                onDeletePress={() => confirmDelete(oracle.id, oracle.name)}
+                onLongPress={() => confirmDelete(oracle.id, oracle.name)}
                 variant="grid"
               />
             ))}
@@ -196,35 +260,16 @@ export default React.memo(function HomeScreen() {
 
         {oracles.length === 0 && !isLoading && (
           <View style={styles.emptyState}>
-            <GlowingOrb size={80} color={colors.accent} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              No oracles yet.
+              Create your first oracle
             </Text>
             <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-              Tap Create to build your first one!
+              Use “New” to start building.
             </Text>
           </View>
         )}
       </ScrollView>
 
-      <Animated.View 
-        style={[
-          styles.fab,
-          { 
-            backgroundColor: colors.accent,
-            bottom: insets.bottom + 20,
-            transform: [{ scale: fabScale }],
-          }
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.fabButton}
-          onPress={handleCreateOracle}
-          activeOpacity={0.9}
-        >
-          <Plus size={28} color={colors.background} strokeWidth={2.5} />
-        </TouchableOpacity>
-      </Animated.View>
     </View>
   );
 });
@@ -232,13 +277,6 @@ export default React.memo(function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  headerGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 200,
   },
   scrollView: {
     flex: 1,
@@ -248,6 +286,9 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 28,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
   },
   headerContent: {
     gap: 8,
@@ -256,12 +297,26 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '800',
     letterSpacing: -1,
+    fontFamily: Typography.title,
   },
-  quote: {
-    fontSize: 15,
+  subheading: {
+    fontSize: 13,
     fontWeight: '500',
-    lineHeight: 22,
-    opacity: 0.8,
+    fontFamily: Typography.body,
+  },
+  createButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minWidth: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createButtonText: {
+    fontSize: 14,
+    fontFamily: Typography.bodyStrong,
+    letterSpacing: 0.2,
   },
 
   section: {
@@ -276,11 +331,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
+    fontFamily: Typography.titleAlt,
   },
   countBadge: {
     minWidth: 28,
     height: 24,
     borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 8,
@@ -318,22 +375,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 260,
   },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  fabButton: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  // FAB removed for calmer, more professional UI
 });

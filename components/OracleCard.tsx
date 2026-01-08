@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
+// No gradients for the clean, professional theme
 import {
   Scale,
   Target,
@@ -18,13 +18,13 @@ import {
   Zap,
   Calendar,
   Star,
-  Sparkles,
   Sun,
   Timer,
-  Play,
+  Trash2,
+  Plus,
 } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { Oracle, categoryColors } from '@/types/oracle';
+import { Oracle } from '@/types/oracle';
 
 const { width } = Dimensions.get('window');
 
@@ -33,6 +33,8 @@ interface OracleCardProps {
   onPress: () => void;
   variant?: 'compact' | 'list' | 'grid';
   onRunPress?: () => void;
+  onDeletePress?: () => void;
+  onLongPress?: () => void;
 }
 
 const formatDate = (date: Date): string => {
@@ -56,15 +58,21 @@ const iconMap: Record<string, React.ComponentType<{ size: number; color: string 
   Zap,
   Calendar,
   Star,
-  Sparkles,
   Sun,
   Timer,
+  Plus,
 };
 
-export default React.memo(function OracleCard({ oracle, onPress, variant = 'grid', onRunPress }: OracleCardProps) {
+export default React.memo(function OracleCard({
+  oracle,
+  onPress,
+  variant = 'grid',
+  onRunPress,
+  onDeletePress,
+  onLongPress,
+}: OracleCardProps) {
   const { colors } = useTheme();
-  const categoryColor = colors[categoryColors[oracle.category] as keyof typeof colors] as string;
-  const IconComponent = iconMap[oracle.icon] || Sparkles;
+  const IconComponent = iconMap[oracle.icon] || Plus;
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -98,30 +106,44 @@ export default React.memo(function OracleCard({ oracle, onPress, variant = 'grid
     }
   };
 
+  const handleDeletePress = (e: any) => {
+    if (typeof (e?.stopPropagation) === 'function') e.stopPropagation();
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    if (onDeletePress) onDeletePress();
+  };
+
   if (variant === 'compact') {
     return (
       <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
         <TouchableOpacity
-          style={[styles.compactCard, { backgroundColor: colors.surface }]}
+          style={[
+            styles.compactCard,
+            { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth },
+          ]}
           onPress={onPress}
+          onLongPress={onLongPress}
+          delayLongPress={450}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           activeOpacity={0.8}
         >
-        <LinearGradient
-          colors={[`${categoryColor}20`, 'transparent']}
-          style={styles.cardGlow}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
-        <View style={[styles.compactIcon, { backgroundColor: `${categoryColor}20` }]}>
-          <IconComponent size={20} color={categoryColor} />
+        <View style={[styles.compactIcon, { borderColor: colors.border }]}>
+          <IconComponent size={20} color={colors.textSecondary} />
         </View>
         <Text style={[styles.compactName, { color: colors.text }]} numberOfLines={1}>
           {oracle.name}
         </Text>
-        {oracle.isFavorite && (
-          <Star size={14} color={colors.accent} fill={colors.accent} />
+        {oracle.isFavorite && <Star size={14} color={colors.textSecondary} />}
+        {onDeletePress && (
+          <TouchableOpacity
+            onPress={handleDeletePress}
+            style={[styles.trashButton, { borderColor: colors.border }]}
+            activeOpacity={0.85}
+          >
+            <Trash2 size={14} color={colors.textMuted} />
+          </TouchableOpacity>
         )}
         </TouchableOpacity>
       </Animated.View>
@@ -132,14 +154,16 @@ export default React.memo(function OracleCard({ oracle, onPress, variant = 'grid
     return (
       <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
         <TouchableOpacity
-          style={[styles.listCard, { backgroundColor: colors.surface }]}
+          style={[styles.listCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
           onPress={onPress}
+          onLongPress={onLongPress}
+          delayLongPress={450}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           activeOpacity={0.8}
         >
-        <View style={[styles.listIcon, { backgroundColor: `${categoryColor}20` }]}>
-          <IconComponent size={22} color={categoryColor} />
+        <View style={[styles.listIcon, { borderColor: colors.border }]}>
+          <IconComponent size={22} color={colors.textSecondary} />
         </View>
         <View style={styles.listContent}>
           <Text style={[styles.listName, { color: colors.text }]} numberOfLines={1}>
@@ -150,12 +174,19 @@ export default React.memo(function OracleCard({ oracle, onPress, variant = 'grid
           </Text>
         </View>
         <View style={styles.listMeta}>
-          {oracle.isFavorite && (
-            <Star size={14} color={colors.accent} fill={colors.accent} />
-          )}
+          {oracle.isFavorite && <Star size={14} color={colors.textSecondary} />}
           <Text style={[styles.listUsage, { color: colors.textMuted }]}>
             {oracle.usageCount}×
           </Text>
+          {onDeletePress && (
+            <TouchableOpacity
+              onPress={handleDeletePress}
+              style={[styles.trashButton, { borderColor: colors.border }]}
+              activeOpacity={0.85}
+            >
+              <Trash2 size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
         </View>
         </TouchableOpacity>
       </Animated.View>
@@ -167,36 +198,41 @@ export default React.memo(function OracleCard({ oracle, onPress, variant = 'grid
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
-        style={[styles.gridCard, { backgroundColor: colors.surface, width: cardWidth }]}
+        style={[styles.gridCard, { backgroundColor: colors.surface, width: cardWidth, borderColor: colors.border }]}
         onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={450}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         activeOpacity={0.8}
       >
-      <LinearGradient
-        colors={[`${categoryColor}15`, 'transparent']}
-        style={styles.cardGlow}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
       <View style={styles.gridHeader}>
-        <View style={[styles.gridIcon, { backgroundColor: `${categoryColor}20` }]}>
-          <IconComponent size={22} color={categoryColor} />
+        <View style={[styles.gridIcon, { borderColor: colors.border }]}>
+          <IconComponent size={22} color={colors.textSecondary} />
         </View>
-        {oracle.isFavorite && (
-          <Star size={14} color={colors.accent} fill={colors.accent} />
-        )}
+        <View style={styles.gridHeaderRight}>
+          {oracle.isFavorite && <Star size={14} color={colors.textSecondary} />}
+          {onDeletePress && (
+            <TouchableOpacity
+              onPress={handleDeletePress}
+              style={[styles.trashButton, { borderColor: colors.border }]}
+              activeOpacity={0.85}
+            >
+              <Trash2 size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
       <Text style={[styles.gridName, { color: colors.text }]} numberOfLines={2}>
         {oracle.name}
       </Text>
-      <Text style={[styles.gridDescription, { color: colors.textSecondary }]} numberOfLines={2}>
+      <Text style={[styles.gridDescription, { color: colors.textSecondary }]} numberOfLines={1}>
         {oracle.description}
       </Text>
       <View style={styles.gridFooter}>
         <View style={styles.gridFooterLeft}>
-          <View style={[styles.categoryBadge, { backgroundColor: `${categoryColor}20` }]}>
-            <Text style={[styles.categoryText, { color: categoryColor }]}>
+          <View style={[styles.categoryBadge, { backgroundColor: colors.surfaceHover, borderColor: colors.border }]}>
+            <Text style={[styles.categoryText, { color: colors.textMuted }]}>
               {oracle.category}
             </Text>
           </View>
@@ -204,13 +240,6 @@ export default React.memo(function OracleCard({ oracle, onPress, variant = 'grid
             {formatDate(oracle.createdAt)}
           </Text>
         </View>
-        <TouchableOpacity
-          style={[styles.runButton, { backgroundColor: categoryColor }]}
-          onPress={handleRunPress}
-          activeOpacity={0.8}
-        >
-          <Play size={14} color={colors.background} fill={colors.background} />
-        </TouchableOpacity>
       </View>
       </TouchableOpacity>
     </Animated.View>
@@ -224,38 +253,46 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: 4,
     minWidth: 160,
     overflow: 'hidden',
-  },
-  cardGlow: {
-    ...StyleSheet.absoluteFillObject,
   },
   compactIcon: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 2,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
   },
   compactName: {
     flex: 1,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  trashButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
   listCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
     padding: 14,
-    borderRadius: 16,
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   listIcon: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 2,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
   },
   listContent: {
     flex: 1,
@@ -263,10 +300,11 @@ const styles = StyleSheet.create({
   },
   listName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   listDescription: {
     fontSize: 13,
+    opacity: 0.9,
   },
   listMeta: {
     flexDirection: 'row',
@@ -279,8 +317,9 @@ const styles = StyleSheet.create({
   },
   gridCard: {
     padding: 16,
-    borderRadius: 18,
+    borderRadius: 4,
     overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
   },
   gridHeader: {
     flexDirection: 'row',
@@ -288,16 +327,22 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 12,
   },
+  gridHeaderRight: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
   gridIcon: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 2,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
   },
   gridName: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
     marginBottom: 6,
     lineHeight: 20,
   },
@@ -305,6 +350,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 12,
+    opacity: 0.9,
   },
   gridFooter: {
     flexDirection: 'row',
@@ -318,27 +364,16 @@ const styles = StyleSheet.create({
   categoryBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 2,
+    borderWidth: 1,
   },
   categoryText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'capitalize',
   },
   dateText: {
     fontSize: 11,
     fontWeight: '500',
-  },
-  runButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    elevation: 3,
   },
 });

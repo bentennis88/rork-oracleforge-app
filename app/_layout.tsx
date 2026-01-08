@@ -7,8 +7,18 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { OracleProvider } from "@/hooks/useOracles";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { OnboardingProvider, useOnboarding } from "@/hooks/useOnboarding";
+import * as Notifications from 'expo-notifications';
 
 SplashScreen.preventAutoHideAsync();
+
+// Ensure notifications display while app is foregrounded.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
 
 const queryClient = new QueryClient();
 

@@ -3,22 +3,24 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
-  TouchableOpacity,
   ScrollView,
   Platform,
   ToastAndroid,
   Alert,
+  Pressable,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+// (No gradient use in this screen after redesign)
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { RotateCcw } from 'lucide-react-native';
+import { Edit3, Save } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { useOracles } from '@/hooks/useOracles';
+import { useAuth } from '@/hooks/useAuth';
 import { OracleRenderer, type OracleJson } from '@/components/OracleRenderer';
 import { categoryIcons } from '@/types/oracle';
+import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
+import { db } from '@/config/firebase';
+import { Typography } from '@/constants/typography';
 
 function showToast(message: string) {
   if (Platform.OS === 'android') {
@@ -30,7 +32,7 @@ function showToast(message: string) {
     alert(message);
     return;
   }
-  Alert.alert('Error', message);
+  Alert.alert('Notice', message);
 }
 
 function mapOracleCategory(category?: string) {
@@ -45,10 +47,11 @@ function mapOracleCategory(category?: string) {
 
 export default function OraclePreviewScreen() {
   const { colors } = useTheme();
-  const { addOracle } = useOracles();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const userPrompt = (params.userPrompt as string) || '';
+  const refineId = (params.refineId as string) || '';
 
   const oracle: OracleJson | null = useMemo(() => {
     try {
@@ -61,10 +64,10 @@ export default function OraclePreviewScreen() {
     }
   }, [params.oracle]);
 
-  const [title, setTitle] = useState(oracle?.title ?? 'New Oracle');
+  const title = oracle?.title ?? 'New Oracle';
   const description = oracle?.description ?? userPrompt;
 
-  const handleSave = async () => {
+  const saveOracle = async () => {
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
@@ -72,37 +75,114 @@ export default function OraclePreviewScreen() {
       showToast('Missing oracle data. Please regenerate.');
       return;
     }
+    if (!user) return;
 
-    const category = mapOracleCategory(oracle.category);
-    const icon = categoryIcons[category] ?? 'Sparkles';
+    const category = oracle.category || 'Other';
+    const categoryKey = mapOracleCategory(category);
+    const icon = categoryIcons[categoryKey] ?? 'Sparkles';
 
-    const newOracle = await addOracle({
-      name: title || oracle.title,
-      description: oracle.description,
+    const baseOracleData = {
+      // Full Grok JSON object (what we render from)
+      title: oracle.title || 'Untitled Oracle',
+      description: oracle.description || '',
       category,
-      prompt: userPrompt || oracle.description,
+      components: oracle.components || [],
+      result: oracle.result || { type: 'text', message: 'No result' },
+      prompt: userPrompt, // original user input
+      // Back-compat fields used elsewhere in the app
+      name: title || oracle.title || 'Untitled Oracle',
       icon,
       oracleJson: oracle,
-    } as any);
+    };
 
-    if (!newOracle) {
-      console.error('Failed to save oracle');
+    const saveAsNew = async () => {
+      const oracleData = {
+        ...baseOracleData,
+        createdAt: new Date().toISOString(),
+        usageCount: 0,
+        isFavorite: false,
+      };
+      const docRef = await addDoc(collection(db, 'users', user.uid, 'oracles'), oracleData);
+      console.log('Oracle saved with full data:', docRef.id);
+      return docRef.id;
+    };
+
+    const overwriteExisting = async () => {
+      const oracleRef = doc(db, 'users', user.uid, 'oracles', refineId);
+      await updateDoc(oracleRef, {
+        ...baseOracleData,
+        updatedAt: new Date().toISOString(),
+      });
+      console.log('Oracle overwritten with refined data:', refineId);
+      return refineId;
+    };
+
+    let savedId: string | null = null;
+
+    try {
+      if (refineId) {
+        if (Platform.OS === 'web') {
+          // eslint-disable-next-line no-alert
+          const overwrite = confirm('Overwrite the existing oracle? (Cancel = Save as new)');
+          savedId = overwrite ? await overwriteExisting() : await saveAsNew();
+        } else {
+          await new Promise<void>((resolve) => {
+            Alert.alert('Save refined oracle', 'Choose how you want to save this refinement.', [
+              {
+                text: 'Save as New',
+                onPress: async () => {
+                  savedId = await saveAsNew();
+                  resolve();
+                },
+              },
+              {
+                text: 'Overwrite',
+                style: 'destructive',
+                onPress: async () => {
+                  savedId = await overwriteExisting();
+                  resolve();
+                },
+              },
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve() },
+            ]);
+          });
+        }
+      } else {
+        savedId = await saveAsNew();
+      }
+    } catch (e) {
+      console.error('Save failed:', e);
       showToast('Something went wrong — please try again');
       return;
     }
 
+    if (!savedId) return;
+
     router.replace('/(tabs)/(home)');
-    
+
     setTimeout(() => {
-      router.push(`/oracle/${newOracle.id}` as const);
+      router.push({
+        pathname: '/oracle-run',
+        params: {
+          oracle: JSON.stringify(oracle),
+          userPrompt,
+          oracleId: savedId,
+        },
+      });
     }, 100);
   };
 
-  const handleRegenerate = () => {
+  const handleRefine = () => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    router.back();
+    router.push({
+      pathname: '/(tabs)/create',
+      params: {
+        prompt: userPrompt,
+        ...(refineId ? { refineId } : {}),
+      },
+    });
   };
 
   return (
@@ -125,42 +205,51 @@ export default function OraclePreviewScreen() {
         showsVerticalScrollIndicator={false}
       >
         {!oracle && (
-          <View style={[styles.section, { padding: 16, borderRadius: 12, backgroundColor: colors.surface }]}>
-            <Text style={[styles.descriptionText, { color: colors.text }]}>
+          <View style={[styles.section, { padding: 16, borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' }]}>
+            <Text style={[styles.descriptionText, { color: colors.textSecondary }]}>
               We couldn&apos;t load this oracle preview. Please go back and try generating again.
             </Text>
           </View>
         )}
 
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Oracle Title</Text>
-          <TextInput
-            style={[styles.titleInput, { 
-              color: colors.text, 
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            }]}
-            value={title}
-            onChangeText={setTitle}
-            placeholder="Enter oracle name..."
-            placeholderTextColor={colors.textMuted}
-            maxLength={50}
-          />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Description</Text>
-          <View style={[styles.descriptionBox, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.descriptionText, { color: colors.text }]}>
+        {oracle && (
+          <View style={styles.section}>
+            <Text style={[styles.titleText, { color: colors.text }]}>{title}</Text>
+            <Text style={[styles.descriptionText, { color: colors.textSecondary }]}>
               {description}
             </Text>
           </View>
-        </View>
+        )}
 
         {oracle && (
           <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Interactive Tool</Text>
-            <OracleRenderer oracle={oracle} />
+            {Array.isArray(oracle.components) && oracle.components.length > 0 ? (
+              <OracleRenderer oracle={oracle} />
+            ) : (
+              <View
+                style={[
+                  styles.fallbackBox,
+                  { backgroundColor: colors.surface, borderColor: 'rgba(255,255,255,0.10)' },
+                ]}
+              >
+                <Text style={[styles.descriptionText, { color: colors.textSecondary }]}>
+                  {oracle.description}
+                </Text>
+                <Pressable
+                  onPress={() => showToast('Logged successfully')}
+                  style={({ pressed }) => [
+                    styles.logEntryButton,
+                    {
+                      borderColor: colors.border,
+                      backgroundColor: colors.surface,
+                      transform: [{ scale: pressed ? 0.98 : 1 }],
+                    },
+                  ]}
+                >
+                  <Text style={[styles.logEntryText, { color: '#FFFFFF' }]}>Log Entry</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -171,37 +260,45 @@ export default function OraclePreviewScreen() {
           {
             backgroundColor: colors.background,
             paddingBottom: insets.bottom + 12,
-            borderTopColor: colors.border,
+              borderTopColor: 'rgba(255,255,255,0.10)',
           },
         ]}
       >
-        <TouchableOpacity
-          style={[styles.regenerateButton, { backgroundColor: colors.surface }]}
-          onPress={handleRegenerate}
-          activeOpacity={0.7}
+        <Pressable
+          onPress={handleRefine}
+          style={({ pressed }) => [
+            styles.regenerateButton,
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+              transform: [{ scale: pressed ? 0.98 : 1 }],
+            },
+          ]}
         >
-          <RotateCcw size={20} color={colors.text} />
-          <Text style={[styles.regenerateButtonText, { color: colors.text }]}>
-            Regenerate
+          <Edit3 size={18} color={colors.textSecondary} />
+          <Text style={[styles.regenerateButtonText, { color: '#FFFFFF' }]}>
+            Refine
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
-        <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: colors.accent }]}
-          onPress={handleSave}
-          activeOpacity={0.8}
+        <Pressable
+          onPress={saveOracle}
           disabled={!oracle}
+          style={({ pressed }) => [
+            styles.saveButton,
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+              opacity: oracle ? 1 : 0.5,
+              transform: [{ scale: pressed && oracle ? 0.98 : 1 }],
+            },
+          ]}
         >
-          <LinearGradient
-            colors={[colors.accent, colors.accentLight]}
-            style={styles.saveGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          />
-          <Text style={[styles.saveButtonText, { color: colors.background }]}>
+          <Save size={18} color={colors.textSecondary} />
+          <Text style={[styles.saveButtonText, { color: '#FFFFFF' }]}>
             Save to My Oracles
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     </View>
   );
@@ -221,28 +318,17 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
   },
-  label: {
-    fontSize: 12,
+  titleText: {
+    fontSize: 22,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 10,
-  },
-  titleInput: {
-    fontSize: 20,
-    fontWeight: '700',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  descriptionBox: {
-    padding: 16,
-    borderRadius: 12,
+    letterSpacing: -0.3,
+    fontFamily: Typography.title,
+    marginBottom: 8,
   },
   descriptionText: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: Typography.body,
   },
   footer: {
     position: 'absolute',
@@ -262,36 +348,46 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     height: 56,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    borderRadius: 4,
+    borderWidth: 1,
   },
   regenerateButtonText: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
+    fontFamily: Typography.bodyStrong,
   },
   saveButton: {
     flex: 2,
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
     height: 56,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  saveGradient: {
-    ...StyleSheet.absoluteFillObject,
+    borderRadius: 4,
+    borderWidth: 1,
   },
   saveButtonText: {
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+    fontFamily: Typography.bodyStrong,
+  },
+  fallbackBox: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 16,
+    gap: 12,
+  },
+  logEntryButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignSelf: 'flex-start',
+  },
+  logEntryText: {
+    fontFamily: Typography.bodyStrong,
+    fontSize: 13,
+    letterSpacing: 0.2,
   },
 });
