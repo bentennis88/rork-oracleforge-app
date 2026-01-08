@@ -9,6 +9,7 @@
     "lint": "expo lint"
   },
   "dependencies": {
+    "@babel/standalone": "^7.28.5",
     "@expo-google-fonts/orbitron": "^0.2.3",
     "@expo-google-fonts/rajdhani": "^0.2.3",
     "@expo-google-fonts/space-mono": "^0.2.3",

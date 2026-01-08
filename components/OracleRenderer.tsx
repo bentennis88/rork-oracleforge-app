@@ -217,16 +217,16 @@ function includesAny(hay: string, needles: string[]) {
   return needles.some((n) => hay.includes(n));
 }
 
-function pickInitialAmount(oracle: OracleJson, inputs: Record<string, number>) {
+function pickInitialAmount(oracle: OracleJson, inputs: Record<string, number | null>) {
   const keys = ['principal', 'initial', 'initialAmount', 'startingAmount', 'deposit', 'P'];
   for (const k of keys) {
     const v = inputs[k];
-    if (Number.isFinite(v) && v > 0) return v;
+    if (v != null && Number.isFinite(v) && v > 0) return v;
   }
   const first = (oracle.components ?? []).find((c) => c.type === 'number' || c.type === 'slider');
   if (!first) return null;
   const v = inputs[first.id];
-  return Number.isFinite(v) && v > 0 ? v : null;
+  return v != null && Number.isFinite(v) && v > 0 ? v : null;
 }
 
 function interpolateMessage(template: string, ctx: Record<string, any>) {
@@ -752,7 +752,7 @@ export const OracleRenderer = ({ oracle, oracleId }: OracleRendererProps) => {
               if (t.getTime() <= now.getTime()) continue;
               await Notifications.scheduleNotificationAsync({
                 content: { title: oracle.title || 'Reminder', body: msg },
-                trigger: t,
+                trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: t },
               });
             }
           } else if (r.interval === 'daily' && start) {
@@ -761,7 +761,7 @@ export const OracleRenderer = ({ oracle, oracleId }: OracleRendererProps) => {
             if (t.getTime() <= now.getTime()) continue;
             await Notifications.scheduleNotificationAsync({
               content: { title: oracle.title || 'Reminder', body: msg },
-              trigger: t,
+              trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: t },
             });
           }
         }
